@@ -1,6 +1,6 @@
 {
   "name": "gladys-doorbird",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "DoorBird integration for Gladys Assistant: door stations over their local LAN API.",
   "type": "module",

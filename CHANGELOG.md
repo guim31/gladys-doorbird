@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-16
+
 ### Added
 
 - DoorBird video door stations (D10x, D11x, D21x, D2101V…) over their local
@@ -34,4 +36,5 @@ the notes of the version's GitHub Release.
 - A password refused once is never tried again on its own.
 - English, French, German and Spanish.
 
-[Unreleased]: https://github.com/guim31/gladys-doorbird/commits/main
+[Unreleased]: https://github.com/guim31/gladys-doorbird/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/guim31/gladys-doorbird/releases/tag/v1.0.1
