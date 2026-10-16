@@ -1,0 +1,15 @@
+{
+  "BHA": {
+    "RETURNCODE": "1",
+    "VERSION": [
+      {
+        "FIRMWARE": "000109",
+        "BUILD_NUMBER": "15120529",
+        "PRIMARY_MAC_ADDR": "1CCAE3D4E5F6",
+        "WIFI_MAC_ADDR": "1CCAE3D4E5F7",
+        "RELAYS": ["1", "2"],
+        "DEVICE-TYPE": "DoorBird D101"
+      }
+    ]
+  }
+}

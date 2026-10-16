@@ -1,0 +1,163 @@
+# DoorBird
+
+Bringt deine **DoorBird-Video-Türstationen** (D10x, D11x, D21x, D2101V…) **lokal** zu Gladys, über ihre
+offizielle LAN-API: das Kamerabild, das Klingeln, den Bewegungsmelder, das Infrarotlicht und — nur wenn du es
+erlaubst — das Öffnen der Tür aus einer Szene. Nichts läuft über eine Cloud.
+
+> Developed without the hardware: feedback welcome. Ohne die Hardware entwickelt: Deine Rückmeldungen sind
+> willkommen, was funktioniert und was nicht, auf
+> [GitHub](https://github.com/guim31/gladys-doorbird/issues).
+>
+> Diese Integration ist nicht mit Bird Home Automation (DoorBird) verbunden.
+
+## Voraussetzungen
+
+- Gladys 5.1.0 oder neuer.
+- Eine DoorBird-Türstation im selben Netzwerk wie Gladys, mit fester Adresse (im Router einstellen).
+- Die DoorBird-App mit den Administrator-Zugangsdaten der Station (auf dem mitgelieferten „Digital
+  Passport“), um einen Benutzer für Gladys anzulegen.
+
+## Einen eigenen DoorBird-Benutzer anlegen
+
+Gladys darf nicht das Administratorkonto verwenden. In der DoorBird-App: **Einstellungen → Administration**,
+mit den Administrator-Zugangsdaten anmelden, dann **Benutzer** → **+**. Die App gibt dem neuen Benutzer einen
+Namen wie `abcdef0001` und ein Passwort: Notiere beides. Gib ihm nur, was Gladys braucht:
+
+- **Watch always** (Live-Ansicht jederzeit): das Kamerabild jederzeit und das Infrarotlicht. Ohne dieses
+  Recht gibt der DoorBird sein Bild nur 5 Minuten nach einem Klingeln frei.
+- Die **Relais**, die das Öffnen der Tür verwenden darf, und nur wenn du es in Gladys erlaubst (siehe unten).
+- Nichts weiter: Gladys braucht weder „API-Operator“ noch den Verlauf noch die Favoriten.
+
+Prüfe auch, ob der **Bewegungsmelder** am DoorBird aktiviert ist (Administration → Bewegungsmelder), sonst
+wird keine Bewegung gemeldet. Die Namen der Rechte können je nach Version und Sprache der App leicht abweichen.
+
+## Konfiguration
+
+In Gladys: **Integrationen → DoorBird → Konfiguration**.
+
+- **Adresse des DoorBird**: die IP-Adresse der Türstation, z. B. `192.168.1.50` (mit `:Port`, falls nicht 80,
+  `https://` für HTTPS).
+- **DoorBird-Benutzer** und **Passwort**: der oben angelegte Benutzer. Das Passwort wird nur an den DoorBird
+  gesendet. Nach einer Ablehnung fragt die Integration nicht mehr (sie bleibt nie hartnäckig), bis du es
+  korrigierst oder „Verbindung testen“ drückst.
+- **Zweiter DoorBird** (optional): **Seine Adresse**, **Sein Benutzer** und **Sein Passwort**, für ein Tor
+  oder eine Hintertür.
+- **DoorBird-Bild**: wie oft das Bild jedes DoorBird erneuert wird (nur bei Ereignissen, jede Minute, alle 5
+  Minuten — Standard —, alle 15 Minuten oder jede Stunde). Ein Klingeln oder eine Bewegung nimmt immer ein
+  neues auf.
+- **Öffnen der Tür erlauben**: standardmäßig aus. Siehe „Tür öffnen (DoorBird-Relais)“ unten.
+- **Sprache der Namen**: Sprache der Funktionsnamen (standardmäßig Französisch) und der Texte für Szenen. Die
+  Namen werden beim Hinzufügen des Geräts festgelegt: Ändere die Sprache vorher.
+
+Öffne dann den Tab **Entdecken** und füge den DoorBird zu Gladys hinzu.
+
+## Das DoorBird-Gerät
+
+Ein Gerät pro DoorBird, nach seinem Modell benannt (zum Beispiel „DoorBird D2101V“), mit diesen Funktionen:
+
+| Funktion          | Typ             | Was sie tut                                                                           |
+| ----------------- | --------------- | ------------------------------------------------------------------------------------- |
+| **Bild**          | Kamera          | Das Kamerabild, im gewählten Abstand, bei jedem Klingeln und jeder Bewegung erneuert. |
+| **Online**        | Eingang         | 1, solange der DoorBird antwortet, 0, wenn er nicht erreichbar ist.                   |
+| **Türklingel**    | Türklingel      | 1, wenn jemand klingelt, zehn Sekunden später wieder 0.                               |
+| **Bewegung**      | Bewegungsmelder | 1, solange der Bewegungsmelder des DoorBird eine Bewegung meldet.                     |
+| **Infrarotlicht** | Licht           | Schaltet das Infrarotlicht ein. Es geht nach etwa 3 Minuten von selbst aus.           |
+
+Das Infrarotlicht lässt sich nicht per Befehl ausschalten: Der DoorBird bietet das nicht an, und die
+Integration sagt es, statt so zu tun als ob. Die Tür ist **nie** eine Funktion des Geräts: Kein Schalter,
+kein Sprachassistent, keine Dashboard-Taste kann sie öffnen.
+
+## Dashboard-Widget
+
+Das Widget **DoorBird** zeigt für alle DoorBirds oder den in seinen Einstellungen gewählten („DoorBird
+(leer: alle)“):
+
+- die Zahl der Klingeln und Bewegungen der letzten 24 Stunden;
+- die letzten Klingeln und Bewegungen, die neuesten zuerst, jeweils mit dem Bild dieses Moments;
+- ob jeder DoorBird online ist;
+- bei einem einzigen zu Gladys hinzugefügten DoorBird eine Taste **Infrarotlicht**.
+
+Die Liste wird im Speicher gehalten: Nach einem Neustart der Integration beginnt sie leer.
+
+## Szenen-Auslöser
+
+- **Jemand klingelt am DoorBird**: ein Klingeln. Filter: der DoorBird (leer: beliebig). Variable: **Name des
+  DoorBird**.
+- **Bewegung vor dem DoorBird**: der Beginn einer Bewegung. Filter: der DoorBird. Variable: **Name des
+  DoorBird**.
+
+Das Bild des DoorBird wird vor dem Auslösen erneuert: Eine Aktion „Kamerabild senden“ in derselben Szene
+sendet den Besucher. Höchstens ein Auslöser pro DoorBird alle 15 Sekunden (ein langes Drücken, eine Person,
+die vor der Kamera verweilt, zählen einmal).
+
+## Szenen-Aktionen
+
+- **DoorBird-Bild aktualisieren**: nimmt jetzt ein neues Bild auf, um es danach in einer Nachricht zu senden.
+- **Tür öffnen (DoorBird-Relais)**: schaltet ein **Relais** des DoorBird (Türöffner, Tor): `1` oder `2` für
+  die Relais des DoorBird, `abcdef@1` für ein Relais eines gekoppelten Türcontrollers („Verbindung testen“
+  listet sie auf). Funktioniert erst, wenn **Öffnen der Tür erlauben** aktiviert ist. Nur ein Relais, das der
+  DoorBird auflistet, wird angenommen, und der Befehl wird einmal gesendet, nie wiederholt.
+
+> **Achtung.** Eine Szene, die eine Tür öffnet, öffnet sie für jeden, der davor steht. Verknüpfe sie nie mit
+> einem Auslöser, den jeder draußen verursachen kann (ein Klingeln, eine Bewegung): Verwende sie mit einer
+> Bedingung, die nur du kontrollierst (eine Bestätigung, deine Anwesenheit zu Hause). Gib dem Gladys-Benutzer
+> nur die nötigen Relais.
+
+## Konfigurationsaktionen
+
+- **Verbindung testen**: liest jeden DoorBird neu und meldet Modell, Firmware und Relais und ob sein Benutzer
+  ein Bild aufnehmen darf. Setzt auch einen DoorBird fort, der nach einem abgelehnten Passwort angehalten
+  wurde.
+- **Adresse des Videostreams anzeigen**: die RTSP-Adresse eines DoorBird
+  (`rtsp://benutzer:PASSWORD@adresse:554/mpeg/media.amp`), um das Live-Video in der Integration
+  „RTSP-Kamera“ von Gladys hinzuzufügen. Ersetze `PASSWORD` selbst: Die Integration zeigt es nie an.
+
+## Szenenbeispiele
+
+- **Jemand klingelt → Foto aufs Handy**: Auslöser „Jemand klingelt am DoorBird“, Aktion „Nachricht mit dem
+  Kamerabild senden“ (das Bild des DoorBird).
+- **Bewegung in der Nacht → Licht am Eingang**: Auslöser „Bewegung vor dem DoorBird“, Bedingung „nach
+  Sonnenuntergang“, Aktion „Eingangslicht für 5 Minuten einschalten“.
+- **Bewegung in deiner Abwesenheit → Alarm**: Auslöser „Bewegung vor dem DoorBird“, Bedingung „niemand zu
+  Hause“, Aktionen „DoorBird-Bild aktualisieren“, dann „Nachricht mit dem Kamerabild senden“.
+
+## Funktionsweise
+
+- **Ereignisse**: Die Integration hält eine Verbindung zum Ereignisstrom des DoorBird offen (`monitor.cgi`):
+  Klingeln und Bewegungen kommen in unter einer Sekunde an. Der DoorBird wiederholt seinen Zustand etwa alle
+  20 Sekunden; eine Verbindung, die eine Minute lang still ist, wird neu geöffnet.
+- **Warum nicht die DoorBird-Favoriten**: Ein DoorBird kann bei jedem Ereignis auch eine HTTP-Adresse
+  aufrufen, aber die Sandbox von Gladys nimmt keine eingehende Verbindung an. Der Ereignisstrom ist eine
+  ausgehende Verbindung, hier der zuverlässige Weg. Der Cloud-Verlauf des DoorBird wird nicht genutzt.
+- **Last auf dem DoorBird** (seine LAN-API hat kein veröffentlichtes Kontingent, die Integration bleibt
+  sparsam): die Ereignisverbindung, `info.cgi` alle 5 Minuten (jede Minute, solange der Ereignisstrom
+  unterbrochen ist), ein Bild im gewählten Abstand und bei jedem Ereignis (höchstens 12 Bilder pro Minute und
+  DoorBird, die Grenze von Gladys), höchstens zwei Anfragen gleichzeitig. Zustände gehen nur bei Änderungen an
+  Gladys, sonst alle 6 Stunden.
+
+## Fehlerbehebung
+
+- **„Benutzername oder Passwort abgelehnt“**: Prüfe den Benutzer (nicht den Administrator) und sein Passwort,
+  dann drücke **Verbindung testen**. Die Integration stoppt bei der ersten Ablehnung und bleibt nie hartnäckig.
+- **„Diesem DoorBird-Benutzer fehlt das Recht“**: Gib dem Benutzer „Watch always“ (Bild, Infrarotlicht) oder
+  das Relais (Tür) in der DoorBird-App.
+- **Kein Bild zwischen zwei Klingeln**: dieselbe Ursache, „Watch always“ fehlt.
+- **Keine Bewegung**: Aktiviere den Bewegungsmelder des DoorBird und prüfe seinen Erfassungsbereich.
+- **„Keine DoorBird-LAN-API unter dieser Adresse“**: falsche Adresse oder ein Gerät ohne LAN-API.
+- **Details**: Die Protokolle der Integration (Integrationen → DoorBird) melden, wann ein DoorBird verloren
+  und wieder da ist. Für alles andere setze `LOG_LEVEL=debug`.
+
+## Einschränkungen
+
+- Ohne die Hardware entwickelt: Die Antworten stammen aus dem veröffentlichten Code von DoorBirdPy, Home
+  Assistant, Homebridge und openHAB. Rückmeldungen willkommen.
+- **RFID-Chips und Tastaturcodes werden nicht gemeldet**: Der Ereignisstrom der LAN-API trägt nur die
+  Türklingel und den Bewegungsmelder; die anderen Ereignisse laufen über die DoorBird-Favoriten (eine
+  eingehende Verbindung, in der Sandbox unmöglich).
+- Das Live-Video ist nicht Teil dieser Integration: Verwende die RTSP-Adresse in der Integration
+  „RTSP-Kamera“.
+- Kein Gegensprechen, kein SIP, kein DoorBird-Verlauf (Cloud).
+- Höchstens zwei DoorBirds. Ein Türcontroller (A1081) wird über die Relais seines gekoppelten DoorBird
+  angesprochen.
+- Das Infrarotlicht lässt sich nicht per Befehl ausschalten; seine 3 Minuten bestimmt der DoorBird.
+- Ein Klingeln oder eine Bewegung, während die Integration angehalten ist, wird nicht nachgeholt.

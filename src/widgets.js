@@ -1,169 +1,165 @@
 // -----------------------------------------------------------------------------
-// Dashboard widgets (SDK v0.14+, Gladys 5.1+).
+// Dashboard widget (manifest `widgets`, Gladys 5.1+): `doorbird`.
 //
-// A widget puts the integration's own data on the Gladys dashboard without a
-// dedicated core widget. The manifest `widgets` field declares its identity
-// (key, label, icon, optional per-instance `settings`); at runtime the
-// integration returns a DECLARATIVE content — `text`, `value`, `gauge`,
-// `status`, `chart`, `card-list`, `image`, `button` — that the core renders
-// with its own theme, dark mode and translations. No HTML, no CSS.
+// The use case: a glance at the wall tablet — "who rang, who came by the
+// door?". So the widget shows:
+//   - two tiles: rings and motions over 24 hours;
+//   - the last rings and motions, newest first, each with the image taken
+//     when it happened (card-list, list display, its date under the title);
+//   - the state of the DoorBirds (online or not);
+//   - a button that switches the infrared light on, when one DoorBird is
+//     shown and added to Gladys (a `device_feature` button: Gladys sends the
+//     command through onSetValue). Never a door button: opening a door is a
+//     scene action only.
+// Every DoorBird by default, or the one chosen in the widget settings.
 //
-// Each entry of WIDGETS is keyed by the widget `key` and exposes:
-//   - get(gladys, { settings, language, units, config }): the content,
-//     registered by index.js with `gladys.onWidgetGet(key, ...)`;
-//   - action(gladys, { actionKey, params, settings, config }) (optional): a
-//     tapped `button` carrying an `action`, registered with
-//     `gladys.onWidgetAction`.
-//
-// Check your contents in the tests with `validateWidgetContent` (exported by
-// the SDK, see test/widgets.test.js), or run with DEBUG=gladys-integration-sdk
-// to have the SDK log every violation of the vocabulary and the budget.
+// Budget (8 components, ≤ 2 texts, one focal component, one status): two
+// tiles, one card-list, one status, one button, one caption. The events are
+// kept in memory: the list starts empty after a restart. Images: keys
+// `ev-<id>`, immutable, served by onWidgetGetImage from the hub.
 // -----------------------------------------------------------------------------
 
-import {
-  createLogger,
-  DEVICE_FEATURE_CATEGORIES,
-  DEVICE_TRANSPORTS,
-  WIDGET_COLORS,
-} from '@gladysassistant/integration-sdk';
-import { identifyDevice } from './devices/index.js';
-import { weatherStation } from './devices/weatherStation.js';
-import { plug } from './devices/plug.js';
-import { light } from './devices/light.js';
+import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
+import { EVENT_KINDS, WIDGET_KEY } from './hub.js';
+import { ERROR_KINDS } from './doorbird/client.js';
+import { ERROR_TEXT, pick } from './texts.js';
 
-const logger = createLogger({ name: 'widgets' });
-
-// Widget key, as declared in the manifest `widgets` field.
-export const DEMO_STATUS_WIDGET = 'demo_status';
-
-// Keys of the `button` actions the demo_status content declares.
-const DEMO_STATUS_ACTIONS = { IDENTIFY_LIGHT: 'identify_light' };
-
-// How the plug transport reads in the status list.
-const TRANSPORT_STATUS = {
-  [DEVICE_TRANSPORTS.LOCAL]: { value: { en: 'Local', fr: 'Locale' }, color: WIDGET_COLORS.SUCCESS },
-  [DEVICE_TRANSPORTS.CLOUD]: { value: { en: 'Cloud', fr: 'Cloud' }, color: WIDGET_COLORS.INFO },
-  [DEVICE_TRANSPORTS.UNREACHABLE]: {
-    value: { en: 'Unreachable', fr: 'Injoignable' },
-    color: WIDGET_COLORS.DANGER,
+export const TEXT = {
+  configure: {
+    en: 'Enter the address, user and password of your DoorBird in the configuration of the integration.',
+    fr: "Saisissez l'adresse, l'utilisateur et le mot de passe de votre DoorBird dans la configuration de l'intégration.",
+    de: 'Gib Adresse, Benutzer und Passwort deines DoorBird in der Konfiguration der Integration ein.',
+    es: 'Introduzca la dirección, el usuario y la contraseña de su DoorBird en la configuración de la integración.',
+  },
+  unknown: {
+    en: 'This DoorBird is no longer configured: choose another one in the widget settings.',
+    fr: "Ce DoorBird n'est plus configuré : choisissez-en un autre dans les réglages du widget.",
+    de: 'Dieser DoorBird ist nicht mehr konfiguriert: Wähle einen anderen in den Widget-Einstellungen.',
+    es: 'Este DoorBird ya no está configurado: elija otro en la configuración del widget.',
+  },
+  noEvent: {
+    en: 'No ring and no motion since the integration started.',
+    fr: "Ni sonnerie ni mouvement depuis le démarrage de l'intégration.",
+    de: 'Kein Klingeln und keine Bewegung seit dem Start der Integration.',
+    es: 'Ningún timbre ni movimiento desde el inicio de la integración.',
+  },
+  rings: { en: 'Rings 24 h', fr: 'Sonneries 24 h', de: 'Klingeln 24 h', es: 'Timbres 24 h' },
+  motions: {
+    en: 'Motions 24 h',
+    fr: 'Mouvements 24 h',
+    de: 'Bewegungen 24 h',
+    es: 'Movimientos 24 h',
+  },
+  isOnline: { en: 'Online', fr: 'En ligne', de: 'Online', es: 'En línea' },
+  isOffline: { en: 'Offline', fr: 'Hors ligne', de: 'Offline', es: 'Sin conexión' },
+  ring: { en: 'Ring', fr: 'Sonnerie', de: 'Klingeln', es: 'Timbre' },
+  motion: { en: 'Motion', fr: 'Mouvement', de: 'Bewegung', es: 'Movimiento' },
+  irLight: {
+    en: 'Infrared light',
+    fr: 'Éclairage infrarouge',
+    de: 'Infrarotlicht',
+    es: 'Luz infrarroja',
   },
 };
 
-// A live tile references a feature by its external_id: read it from the
-// discovery payload itself, so the widget and the device never disagree.
-function featureExternalId(gladys, config, blueprint, category) {
-  const device = blueprint.buildDevice(gladys, config);
-  return device.features.find((feature) => feature.category === category).external_id;
+const t = (text, language) => pick(text, language);
+const fit = (text, max) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+
+function message(text, language) {
+  return {
+    ttl_seconds: 300,
+    components: [{ type: 'text', variant: 'body', text: t(text, language) }],
+  };
 }
 
-function plugConnectionStatus(gladys, config) {
-  const { transport, degraded } = plug.transport(gladys, config);
-  const { value, color } = TRANSPORT_STATUS[transport];
-  if (degraded) {
-    return {
-      value: { en: `${value.en} (degraded mode)`, fr: `${value.fr} (mode dégradé)` },
-      color: WIDGET_COLORS.WARNING,
-    };
+/** "Ring · DoorBird D2101V" — what happened, and where. */
+export function eventTitle(event, stationName, language) {
+  const what = t(event.kind === EVENT_KINDS.RING ? TEXT.ring : TEXT.motion, language);
+  return fit(`${what} · ${stationName}`, 60);
+}
+
+async function get(hub, { settings, language = 'en' }) {
+  const view = hub.view();
+  if (!view.configured) {
+    return message(TEXT.configure, language);
   }
-  return { value, color };
+  let shown = view.stations;
+  if (settings?.doorbird) {
+    const station = view.stations.find((entry) => entry.externalId === settings.doorbird);
+    if (!station) {
+      return message(TEXT.unknown, language);
+    }
+    shown = [station];
+  }
+  const components = [];
+  if (view.failed.length > 0) {
+    const error = view.failed[0];
+    components.push({
+      type: 'text',
+      variant: 'caption',
+      text: fit(t(ERROR_TEXT[error?.kind] ?? ERROR_TEXT[ERROR_KINDS.HTTP], language), 80),
+    });
+  }
+
+  const key = settings?.doorbird ? shown[0].key : null;
+  components.push(
+    {
+      type: 'value',
+      value: view.eventsToday(EVENT_KINDS.RING, key),
+      label: t(TEXT.rings, language),
+      icon: 'bell',
+    },
+    {
+      type: 'value',
+      value: view.eventsToday(EVENT_KINDS.MOTION, key),
+      label: t(TEXT.motions, language),
+      icon: 'eye',
+    },
+  );
+
+  const byKey = new Map(view.stations.map((station) => [station.key, station]));
+  const events = view.events
+    .filter((event) => !key || event.key === key)
+    .filter((event) => byKey.has(event.key));
+  if (events.length > 0) {
+    components.push({
+      type: 'card-list',
+      display: 'list',
+      items: events.slice(0, 8).map((event) => ({
+        title: eventTitle(event, byKey.get(event.key).name, language),
+        date: new Date(event.at).toISOString(),
+        ...(event.imageKey ? { image: event.imageKey } : {}),
+      })),
+    });
+  } else if (view.failed.length === 0) {
+    components.push({ type: 'text', variant: 'caption', text: t(TEXT.noEvent, language) });
+  }
+
+  const items = shown.slice(0, 10).map((station) => ({
+    label: fit(station.name, 40),
+    icon: station.online ? 'video' : 'video-off',
+    value: t(station.online ? TEXT.isOnline : TEXT.isOffline, language),
+    color: station.online ? WIDGET_COLORS.SUCCESS : WIDGET_COLORS.DANGER,
+  }));
+  if (items.length > 0) {
+    components.push({ type: 'status', items });
+  }
+
+  // The light of a DoorBird added to Gladys: the core needs the feature.
+  if (shown.length === 1 && shown[0].created && shown[0].online) {
+    components.push({
+      type: 'button',
+      label: t(TEXT.irLight, language),
+      icon: 'sun',
+      style: 'secondary',
+      device_feature: shown[0].irLightId,
+      value: 1,
+    });
+  }
+  // Rings and motions nudge the widget (requestWidgetRefresh); the TTL is a net.
+  return { ttl_seconds: 120, components };
 }
 
 export const WIDGETS = {
-  [DEMO_STATUS_WIDGET]: {
-    // `settings` holds the per-instance values of the declared `settings`
-    // (none here); `language` and `units` are those of the user viewing the
-    // dashboard, for the values you format yourself. Multi-language objects
-    // (`{ en, fr }`) are picked by the core, like everywhere else.
-    async get(gladys, { config }) {
-      logger.debug(`onWidgetGet <- ${DEMO_STATUS_WIDGET}`);
-      return {
-        // Reload policy: the computed parts below only change with the
-        // config, and index.js nudges the widget on every (re)connection and
-        // config update (see refreshWidgets) — the TTL is just a safety net.
-        ttl_seconds: 300,
-        components: [
-          // Device-bound tiles: LIVE, they follow the published states over
-          // the core's real-time path. No TTL, no nudge involved.
-          {
-            type: 'value',
-            label: { en: 'Temperature', fr: 'Température' },
-            icon: 'thermometer',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              weatherStation,
-              DEVICE_FEATURE_CATEGORIES.TEMPERATURE_SENSOR,
-            ),
-          },
-          {
-            type: 'value',
-            label: { en: 'Office plug', fr: 'Prise du bureau' },
-            icon: 'zap',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              plug,
-              DEVICE_FEATURE_CATEGORIES.ENERGY_SENSOR,
-            ),
-          },
-          // Computed rows: what the integration knows that no device feature
-          // carries. Served from the core cache until the TTL or a nudge.
-          {
-            type: 'status',
-            items: [
-              {
-                label: { en: 'Plug connection', fr: 'Connexion de la prise' },
-                icon: 'wifi',
-                ...plugConnectionStatus(gladys, config),
-              },
-              {
-                label: { en: 'Observed location', fr: 'Position observée' },
-                icon: 'map-pin',
-                value: `${config.latitude.toFixed(2)}, ${config.longitude.toFixed(2)}`,
-                color: WIDGET_COLORS.NEUTRAL,
-              },
-            ],
-          },
-          // `params` are declared HERE and sent back as-is: the handler never
-          // receives user input (a dashboard can hang on a public wall).
-          {
-            type: 'button',
-            label: { en: 'Identify the light', fr: 'Identifier la lampe' },
-            icon: 'eye',
-            style: 'secondary',
-            action: {
-              key: DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT,
-              params: { device: light.deviceExternalId(gladys) },
-            },
-          },
-        ],
-      };
-    },
-
-    // Resolve an optional toast (string or multi-language object, ≤ 200
-    // characters). After a successful action the core drops the cached
-    // content and every open dashboard refetches it: no nudge needed.
-    async action(gladys, { actionKey, params, config }) {
-      logger.info(`onWidgetAction <- ${DEMO_STATUS_WIDGET}.${actionKey}`);
-      if (actionKey === DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT) {
-        return identifyDevice(gladys, params.device, config);
-      }
-      // Throwing acks the action as failed: the message reaches the user.
-      throw new Error(`Unknown widget action: ${actionKey}`);
-    },
-  },
+  [WIDGET_KEY]: { get },
 };
-
-/**
- * Freshness nudge: ask the core to re-pull every widget NOW instead of
- * waiting for the content TTL. Call it when you KNOW a computed content
- * changed (here: the config, which drives the plug transport and the observed
- * location) — and after every (re)connection, since the nudges are
- * fire-and-forget: rate-limited core-side to 1 per 10 s per widget, dropped
- * silently while disconnected.
- */
-export function refreshWidgets(gladys) {
-  for (const key of Object.keys(WIDGETS)) {
-    gladys.requestWidgetRefresh(key);
-  }
-}

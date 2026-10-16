@@ -1,177 +1,530 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "DoorBird",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "DoorBird door stations, locally: image, rings, motion, infrared light, door opening in scenes.",
+    "fr": "Portiers DoorBird en local : image, sonnerie, mouvement, infrarouge, ouverture de porte en scène.",
+    "de": "DoorBird-Türstationen lokal: Bild, Klingeln, Bewegung, Infrarotlicht, Türöffnung in Szenen.",
+    "es": "Porteros DoorBird en local: imagen, timbre, movimiento, infrarrojos, apertura en escenas."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "docker_image": "ghcr.io/guim31/gladys-doorbird:1.0.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-doorbird/main/cover.png",
+  "categories": ["security"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
-      "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+      "label": {
+        "en": "Your DoorBird",
+        "fr": "Votre DoorBird",
+        "de": "Dein DoorBird",
+        "es": "Su DoorBird"
       },
-      "links": [
+      "description": {
+        "en": "DoorBird video door stations on your network, through their official LAN API. Create a dedicated user in the DoorBird App, with only the permissions it needs (see the documentation). Nothing goes through a cloud.",
+        "fr": "Portiers vidéo DoorBird de votre réseau, par leur API LAN officielle. Créez un utilisateur dédié dans l'app DoorBird, avec les seuls droits utiles (voir la documentation). Rien ne passe par un cloud.",
+        "de": "DoorBird-Video-Türstationen in deinem Netzwerk, über ihre offizielle LAN-API. Lege in der DoorBird-App einen eigenen Benutzer an, nur mit den nötigen Rechten (siehe Dokumentation). Nichts läuft über eine Cloud.",
+        "es": "Porteros de vídeo DoorBird de su red, mediante su API LAN oficial. Cree un usuario dedicado en la app DoorBird, solo con los permisos necesarios (vea la documentación). Nada pasa por una nube."
+      }
+    },
+    {
+      "key": "host",
+      "type": "string",
+      "label": {
+        "en": "DoorBird address",
+        "fr": "Adresse du DoorBird",
+        "de": "Adresse des DoorBird",
+        "es": "Dirección del DoorBird"
+      },
+      "description": {
+        "en": "IP address or name of the door station, with :port if not 80, https:// for HTTPS. Give it a fixed address in your router.",
+        "fr": "Adresse IP ou nom du portier, avec :port si ce n'est pas 80, https:// pour HTTPS. Donnez-lui une adresse fixe dans votre box.",
+        "de": "IP-Adresse oder Name der Türstation, mit :Port, falls nicht 80, https:// für HTTPS. Gib ihr im Router eine feste Adresse.",
+        "es": "Dirección IP o nombre del portero, con :puerto si no es 80, https:// para HTTPS. Asígnele una dirección fija en su router."
+      },
+      "placeholder": {
+        "en": "e.g. 192.168.1.50",
+        "fr": "ex. 192.168.1.50",
+        "de": "z. B. 192.168.1.50",
+        "es": "p. ej. 192.168.1.50"
+      },
+      "required": true,
+      "default": ""
+    },
+    {
+      "key": "username",
+      "type": "string",
+      "label": {
+        "en": "DoorBird user",
+        "fr": "Utilisateur DoorBird",
+        "de": "DoorBird-Benutzer",
+        "es": "Usuario DoorBird"
+      },
+      "description": {
+        "en": "A user created in the DoorBird App (Administration, User), not the administrator.",
+        "fr": "Un utilisateur créé dans l'app DoorBird (Administration, Utilisateur), pas l'administrateur.",
+        "de": "Ein in der DoorBird-App angelegter Benutzer (Administration, Benutzer), nicht der Administrator.",
+        "es": "Un usuario creado en la app DoorBird (Administración, Usuario), no el administrador."
+      },
+      "placeholder": {
+        "en": "e.g. abcdef0001",
+        "fr": "ex. abcdef0001",
+        "de": "z. B. abcdef0001",
+        "es": "p. ej. abcdef0001"
+      },
+      "required": true,
+      "default": ""
+    },
+    {
+      "key": "password",
+      "type": "secret",
+      "label": {
+        "en": "Password",
+        "fr": "Mot de passe",
+        "de": "Passwort",
+        "es": "Contraseña"
+      },
+      "description": {
+        "en": "Sent to the DoorBird only, never to a cloud. After a refused password, the integration stops asking until you fix it.",
+        "fr": "Envoyé au DoorBird seulement, jamais à un cloud. Après un refus, l'intégration ne réessaie plus avant correction.",
+        "de": "Wird nur an den DoorBird gesendet, nie an eine Cloud. Nach einer Ablehnung fragt die Integration erst nach der Korrektur wieder.",
+        "es": "Solo se envía al DoorBird, nunca a una nube. Tras un rechazo, la integración no reintenta hasta que la corrija."
+      },
+      "required": true
+    },
+    {
+      "key": "second",
+      "type": "section",
+      "label": {
+        "en": "Second DoorBird",
+        "fr": "Second DoorBird",
+        "de": "Zweiter DoorBird",
+        "es": "Segundo DoorBird"
+      },
+      "description": {
+        "en": "Optional: a second door station (a gate, a back door), with its own user.",
+        "fr": "Facultatif : un second portier (portail, porte arrière), avec son propre utilisateur.",
+        "de": "Optional: eine zweite Türstation (Tor, Hintertür) mit eigenem Benutzer.",
+        "es": "Opcional: un segundo portero (portón, puerta trasera), con su propio usuario."
+      }
+    },
+    {
+      "key": "host_2",
+      "type": "string",
+      "label": {
+        "en": "Its address",
+        "fr": "Son adresse",
+        "de": "Seine Adresse",
+        "es": "Su dirección"
+      },
+      "placeholder": {
+        "en": "e.g. 192.168.1.51",
+        "fr": "ex. 192.168.1.51",
+        "de": "z. B. 192.168.1.51",
+        "es": "p. ej. 192.168.1.51"
+      },
+      "required": false,
+      "default": ""
+    },
+    {
+      "key": "username_2",
+      "type": "string",
+      "label": {
+        "en": "Its user",
+        "fr": "Son utilisateur",
+        "de": "Sein Benutzer",
+        "es": "Su usuario"
+      },
+      "placeholder": {
+        "en": "e.g. ghijkl0001",
+        "fr": "ex. ghijkl0001",
+        "de": "z. B. ghijkl0001",
+        "es": "p. ej. ghijkl0001"
+      },
+      "required": false,
+      "default": ""
+    },
+    {
+      "key": "password_2",
+      "type": "secret",
+      "label": {
+        "en": "Its password",
+        "fr": "Son mot de passe",
+        "de": "Sein Passwort",
+        "es": "Su contraseña"
+      },
+      "required": false
+    },
+    {
+      "key": "snapshot_interval",
+      "type": "select",
+      "label": {
+        "en": "DoorBird image",
+        "fr": "Image du DoorBird",
+        "de": "DoorBird-Bild",
+        "es": "Imagen del DoorBird"
+      },
+      "description": {
+        "en": "How often the image of each DoorBird added to Gladys is refreshed. A ring or a motion always sends a fresh one.",
+        "fr": "Fréquence de rafraîchissement de l'image des DoorBird ajoutés. Une sonnerie ou un mouvement en envoie toujours une neuve.",
+        "de": "Wie oft das Bild jedes hinzugefügten DoorBird erneuert wird. Ein Klingeln oder eine Bewegung sendet immer ein neues.",
+        "es": "Frecuencia de actualización de la imagen de los DoorBird añadidos. Un timbre o un movimiento siempre envían una nueva."
+      },
+      "required": false,
+      "default": "5",
+      "options": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "value": "0",
+          "label": {
+            "en": "Only on events",
+            "fr": "Seulement sur événement",
+            "de": "Nur bei Ereignissen",
+            "es": "Solo con eventos"
+          }
+        },
+        {
+          "value": "1",
+          "label": {
+            "en": "Every minute",
+            "fr": "Chaque minute",
+            "de": "Jede Minute",
+            "es": "Cada minuto"
+          }
+        },
+        {
+          "value": "5",
+          "label": {
+            "en": "Every 5 minutes",
+            "fr": "Toutes les 5 minutes",
+            "de": "Alle 5 Minuten",
+            "es": "Cada 5 minutos"
+          }
+        },
+        {
+          "value": "15",
+          "label": {
+            "en": "Every 15 minutes",
+            "fr": "Toutes les 15 minutes",
+            "de": "Alle 15 Minuten",
+            "es": "Cada 15 minutos"
+          }
+        },
+        {
+          "value": "60",
+          "label": {
+            "en": "Every hour",
+            "fr": "Toutes les heures",
+            "de": "Jede Stunde",
+            "es": "Cada hora"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "allow_door_open",
+      "type": "boolean",
+      "label": {
+        "en": "Allow opening the door",
+        "fr": "Autoriser l'ouverture de porte",
+        "de": "Öffnen der Tür erlauben",
+        "es": "Permitir abrir la puerta"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "Lets scenes energize a relay of the DoorBird (door strike, gate): scene action only, never a switch. Off by default.",
+        "fr": "Permet aux scènes d'activer un relais du DoorBird (gâche, portail) : action de scène seulement, jamais un interrupteur. Désactivé par défaut.",
+        "de": "Erlaubt Szenen, ein Relais des DoorBird zu schalten (Türöffner, Tor): nur Szenenaktion, nie ein Schalter. Standardmäßig aus.",
+        "es": "Permite que las escenas activen un relé del DoorBird (cerradura, portón): solo acción de escena, nunca un interruptor. Desactivado por defecto."
+      },
+      "required": false,
+      "default": false
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
-    },
-    {
-      "key": "unit",
+      "key": "language",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
-      "required": false,
-      "default": "celsius",
-      "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
-      ]
-    },
-    {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "label": {
+        "en": "Language of the names",
+        "fr": "Langue des noms",
+        "de": "Sprache der Namen",
+        "es": "Idioma de los nombres"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "Language of the feature names and of the texts sent to scenes. Names are set when a device is added.",
+        "fr": "Langue des noms de fonctionnalités et des textes envoyés aux scènes. Les noms sont fixés à l'ajout d'un appareil.",
+        "de": "Sprache der Funktionsnamen und der Texte für Szenen. Die Namen werden beim Hinzufügen festgelegt.",
+        "es": "Idioma de los nombres de funciones y de los textos enviados a las escenas. Se fijan al añadir un dispositivo."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "fr",
+      "options": [
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "English",
+            "de": "English",
+            "es": "English"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "Français",
+            "fr": "Français",
+            "de": "Français",
+            "es": "Français"
+          }
+        },
+        {
+          "value": "de",
+          "label": {
+            "en": "Deutsch",
+            "fr": "Deutsch",
+            "de": "Deutsch",
+            "es": "Deutsch"
+          }
+        },
+        {
+          "value": "es",
+          "label": {
+            "en": "Español",
+            "fr": "Español",
+            "de": "Español",
+            "es": "Español"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
+      "key": "test_connection",
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion",
+        "de": "Verbindung testen",
+        "es": "Probar la conexión"
+      },
+      "timeout_seconds": 60
     },
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
+      "key": "stream_url",
+      "label": {
+        "en": "Show the video stream address",
+        "fr": "Afficher l'adresse du flux vidéo",
+        "de": "Adresse des Videostreams anzeigen",
+        "es": "Mostrar la dirección del flujo de vídeo"
+      },
+      "timeout_seconds": 15,
       "fields": [
         {
-          "key": "device",
+          "key": "doorbird",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
+          "label": {
+            "en": "DoorBird",
+            "fr": "DoorBird",
+            "de": "DoorBird",
+            "es": "DoorBird"
+          }
         }
       ]
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "doorbell_pressed",
+      "label": {
+        "en": "Someone rang the DoorBird",
+        "fr": "Quelqu'un sonne au DoorBird",
+        "de": "Jemand klingelt am DoorBird",
+        "es": "Alguien llama al DoorBird"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "The button of a DoorBird was pressed. Its image is fresh: a scene can send it in a message.",
+        "fr": "Le bouton d'un DoorBird a été pressé. Son image est à jour : une scène peut l'envoyer dans un message.",
+        "de": "Die Taste eines DoorBird wurde gedrückt. Sein Bild ist aktuell: Eine Szene kann es in einer Nachricht senden.",
+        "es": "Se ha pulsado el botón de un DoorBird. Su imagen está al día: una escena puede enviarla en un mensaje."
       },
       "fields": [
         {
-          "key": "device",
+          "key": "doorbird",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
+          "label": {
+            "en": "DoorBird",
+            "fr": "DoorBird",
+            "de": "DoorBird",
+            "es": "DoorBird"
+          }
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "doorbird_name",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": {
+            "en": "DoorBird name",
+            "fr": "Nom du DoorBird",
+            "de": "Name des DoorBird",
+            "es": "Nombre del DoorBird"
+          }
+        }
+      ]
+    },
+    {
+      "key": "motion_detected",
+      "label": {
+        "en": "Motion in front of the DoorBird",
+        "fr": "Mouvement devant le DoorBird",
+        "de": "Bewegung vor dem DoorBird",
+        "es": "Movimiento delante del DoorBird"
+      },
+      "description": {
+        "en": "The motion sensor of a DoorBird detected someone or something. Its image is fresh.",
+        "fr": "Le détecteur de mouvement d'un DoorBird a vu quelqu'un ou quelque chose. Son image est à jour.",
+        "de": "Der Bewegungsmelder eines DoorBird hat jemanden oder etwas erkannt. Sein Bild ist aktuell.",
+        "es": "El detector de movimiento de un DoorBird ha visto a alguien o algo. Su imagen está al día."
+      },
+      "fields": [
+        {
+          "key": "doorbird",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "DoorBird",
+            "fr": "DoorBird",
+            "de": "DoorBird",
+            "es": "DoorBird"
+          }
+        }
+      ],
+      "variables": [
+        {
+          "key": "doorbird_name",
+          "type": "string",
+          "label": {
+            "en": "DoorBird name",
+            "fr": "Nom du DoorBird",
+            "de": "Name des DoorBird",
+            "es": "Nombre del DoorBird"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
+      "key": "refresh_image",
+      "label": {
+        "en": "Refresh the DoorBird image",
+        "fr": "Rafraîchir l'image du DoorBird",
+        "de": "DoorBird-Bild aktualisieren",
+        "es": "Actualizar la imagen del DoorBird"
+      },
       "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+        "en": "Takes a fresh image of the DoorBird for Gladys, to send it in a message right after.",
+        "fr": "Prend une image neuve du DoorBird pour Gladys, à envoyer ensuite dans un message.",
+        "de": "Nimmt ein neues Bild des DoorBird für Gladys auf, um es danach in einer Nachricht zu senden.",
+        "es": "Toma una imagen nueva del DoorBird para Gladys, para enviarla después en un mensaje."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "doorbird",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "DoorBird",
+            "fr": "DoorBird",
+            "de": "DoorBird",
+            "es": "DoorBird"
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "key": "open_door",
+      "label": {
+        "en": "Open the door (DoorBird relay)",
+        "fr": "Ouvrir la porte (relais DoorBird)",
+        "de": "Tür öffnen (DoorBird-Relais)",
+        "es": "Abrir la puerta (relé DoorBird)"
+      },
+      "description": {
+        "en": "Energizes a relay of the DoorBird (door strike, gate). Only once allowed in the configuration of the integration.",
+        "fr": "Active un relais du DoorBird (gâche, portail). Seulement une fois autorisé dans la configuration de l'intégration.",
+        "de": "Schaltet ein Relais des DoorBird (Türöffner, Tor). Nur wenn in der Konfiguration der Integration erlaubt.",
+        "es": "Activa un relé del DoorBird (cerradura, portón). Solo si se ha autorizado en la configuración de la integración."
       },
       "timeout_seconds": 15,
       "fields": [
         {
-          "key": "device",
+          "key": "doorbird",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
+          "label": {
+            "en": "DoorBird",
+            "fr": "DoorBird",
+            "de": "DoorBird",
+            "es": "DoorBird"
+          },
           "required": true
-        }
-      ],
-      "outputs": [
+        },
         {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "key": "relay",
+          "type": "string",
+          "label": {
+            "en": "Relay",
+            "fr": "Relais",
+            "de": "Relais",
+            "es": "Relé"
+          },
+          "description": {
+            "en": "1 or 2 for the relays of the DoorBird, abcdef@1 for a paired door controller: see \"Test the connection\".",
+            "fr": "1 ou 2 pour les relais du DoorBird, abcdef@1 pour un contrôleur de porte associé : voir « Tester la connexion ».",
+            "de": "1 oder 2 für die Relais des DoorBird, abcdef@1 für einen gekoppelten Türcontroller: siehe „Verbindung testen“.",
+            "es": "1 o 2 para los relés del DoorBird, abcdef@1 para un controlador de puerta asociado: vea «Probar la conexión»."
+          },
+          "required": true,
+          "default": "1"
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "doorbird",
+      "label": {
+        "en": "DoorBird",
+        "fr": "DoorBird",
+        "de": "DoorBird",
+        "es": "DoorBird"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "Latest rings and motions with their image, and the state of the DoorBirds.",
+        "fr": "Dernières sonneries et mouvements avec leur image, et état des DoorBird.",
+        "de": "Letzte Klingeln und Bewegungen mit ihrem Bild und der Zustand der DoorBirds.",
+        "es": "Últimos timbres y movimientos con su imagen y estado de los DoorBird."
+      },
+      "icon": "bell",
+      "settings": [
+        {
+          "key": "doorbird",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "DoorBird (empty: all)",
+            "fr": "DoorBird (vide : tous)",
+            "de": "DoorBird (leer: alle)",
+            "es": "DoorBird (vacío: todos)"
+          }
+        }
+      ]
     }
   ]
 }
