@@ -8,20 +8,28 @@ contributors.
 A Gladys Assistant **external integration**: a Node.js service (Node 22+, ESM,
 no build step) that runs in its own sandboxed Docker container and talks to
 Gladys through
-[`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
-its only runtime dependency. It started from the official JavaScript template.
+[`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js).
+It started from the official JavaScript template. Runtime dependencies: the SDK
+and `jpeg-js` (pure JavaScript, to shrink camera images).
+
+It brings DoorBird video door stations into Gladys over their official LAN API
+(`/bha-api/`, HTTP Basic authentication by a dedicated DoorBird user): camera
+image, doorbell ring, motion, infrared light, and door relays as a scene action
+only (disabled by default).
 
 ## Commands
 
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/hub.test.js              # one file
+node --test --test-name-pattern "ring"    # tests whose name matches
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
 npx github:GladysAssistant/integration-store .   # store admission checks
+node scripts/probe.mjs <ip>               # real DoorBird: is a LAN API there? (no credentials)
+DOORBIRD_PASSWORD=… node scripts/probe.mjs <ip> <user>   # real DoorBird, read-only
 ```
 
 The CI (`.github/workflows/ci.yml`) runs `format:check`, `lint` and `test` on
@@ -31,16 +39,25 @@ pushing.
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
+index.js                          SDK wiring only: src/app.js registers the handlers before connect()
+src/app.js                        every SDK handler -> the hub (also used by the tests)
+src/hub.js                        all stations: reads, timers, event streams, states, images, triggers, commands, logs
+src/devices.js                    the Gladys device of a station, feature names (4 languages), values
+src/doorbird/client.js            LAN API client of one station: Basic auth, queue (2 in flight), 401 stop, info, image, commands
+src/doorbird/monitor.js           the event stream (monitor.cgi): line parser, reconnection, hourly recycle
+src/doorbird/http.js              the HTTP seam (node:http/https, streaming), replaced by the fake station in tests
+src/image.js, image-worker.js,    image -> camera image <= 150 KB (worker, scaled decoder)
+  jpeg-scaled.js
 src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/widgets.js                    dashboard widget `doorbird` (manifest `widgets`)
+src/texts.js                      status, error, report and action texts (4 languages)
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+src/store.js                      /data/doorbird-state.json (identity of each station)
+scripts/probe.mjs                 read-only probe of a real DoorBird (not in the image)
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (en and fr mandatory)
 test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+                                  and helpers/fakeDoorBird.js (built from test/fixtures/doorbird)
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
@@ -70,8 +87,10 @@ test/                             node --test, against the SDK's fake Gladys (in
   `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
   code (defaults, action, scene and widget handlers): change both sides
   together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+- **User-facing text** exists in English, French, German and Spanish: action
+  messages, widget content, feature names, manifest texts, and
+  `docs/en.md`, `docs/fr.md`, `docs/de.md`, `docs/es.md`, kept in sync
+  (`test/i18n.test.js` checks the languages and the doc sections).
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
   in English. Tests never touch the network.
 
@@ -233,3 +252,40 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - Docs `en`, `fr`, `de`, `es` avec les mêmes sections.
 - Chauffe, ouverture, sécurité : ne rien rendre pilotable « comme un thermostat » ou par un assistant
   vocal quand une erreur serait dangereuse (leçon d'OctoPrint).
+
+## DoorBird : l'API et les pièges de cette intégration
+
+Sources : `klikini/doorbirdpy` (MIT, GitLab, commit 5aaaf04 du 18/12/2025 ; le dépôt GitHub du même nom est
+figé en 2018), l'intégration Home Assistant `doorbird` (DoorBirdPy 3.0.12), Homebridge DoorBird (Apache-2.0),
+ioBroker.doorbird (MIT), le binding openHAB (EPL, lu, pas recopié). Le PDF de l'API LAN (doorbird.com) est
+refusé par le proxy de la session : rien n'en est cité de première main. **Aucun DoorBird n'a été testé** :
+`scripts/probe.mjs` est à lancer par l'orchestrateur sur un vrai portier.
+
+- **Authentification** : Basic, dans l'en-tête `Authorization` seulement (DoorBirdPy met `user:pass@` dans
+  l'URL : jamais ici, l'URL finit dans les journaux). Pas de nonce : **un 401 est le mot de passe**, le client
+  s'arrête (`blocked`) jusqu'à une nouvelle configuration ou « Tester la connexion ». Ne jamais ajouter de boucle
+  de réessai sur un 401. Utilisateur dédié (`abcdef0001`), jamais l'administrateur.
+- **Codes** : 204 = droit manquant (ioBroker : relais ; même code supposé pour l'image sans « Watch always ») ;
+  404 = pas d'API LAN. `light-on.cgi` et `open-door.cgi` répondent `{"BHA":{"RETURNCODE":"1"}}` (DoorBirdPy) :
+  un 200 vide ou non JSON est accepté.
+- **`info.cgi`** : `BHA.VERSION[0]` : `FIRMWARE`, `BUILD_NUMBER`, `PRIMARY_MAC_ADDR` (filaire, peut manquer),
+  `WIFI_MAC_ADDR`, `RELAYS` et `DEVICE-TYPE` (depuis le firmware 000108). Identité = MAC filaire d'abord, comme
+  HA (un portier passé du Wi-Fi au câble garde son appareil). Relais `1`, `2` ou `<id>@<n>` d'un contrôleur
+  de porte associé (A1081).
+- **Événements** : `monitor.cgi?ring=doorbell,motionsensor`, `multipart/x-mixed-replace;
+boundary=--ioboundary`, lignes `doorbell:H` / `motionsensor:L`, état répété toutes les ~20 s (Homebridge) :
+  60 s de silence = flux mort. **Un nouvel événement = passage L → H** ; un H vu en premier (au démarrage) n'est
+  pas un événement. RFID et clavier n'y sont pas : ils exigent les favoris HTTP (connexion entrante, impossible
+  dans le bac à sable). Les webhooks Gladys Plus (B.17) le permettraient, mais passent par le cloud : écarté.
+- **`history.cgi`** (images de l'historique, cloud DoorBird, droit « History ») : non utilisé, le flux local
+  suffit.
+- **Image** : `image.cgi` sans « Watch always » n'est ouverte que 5 minutes après une sonnerie (doc LAN API,
+  non vérifié). L'image d'une sonnerie arrive donc même sans ce droit.
+- **Infrarouge** : `light-on.cgi`, ~180 s puis extinction seule (Homebridge), aucune commande d'extinction ni
+  lecture d'état : `light/binary` sans retour, 1 à la commande, 0 après 3 min, un 0 demandé est refusé avec un
+  message.
+- **Porte** : `open-door.cgi?r=<relais>`, **jamais réessayé**, désactivé par défaut, action de scène seulement,
+  et seulement un relais listé par `info.cgi` (un ancien firmware sans liste : `1` à `9`).
+- RTSP : `rtsp://user:PASSWORD@ip:554/mpeg/media.amp` (DoorBirdPy), pour l'intégration « Caméra RTSP ».
+- Faux portier de test (`test/helpers/fakeDoorBird.js`) : il envoie l'état courant à l'ouverture du flux
+  (hypothèse, non vérifiée) ; en mode `serve()`, `res.flushHeaders()` sinon le client attend le premier octet.

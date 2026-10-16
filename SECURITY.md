@@ -28,8 +28,31 @@ Gladys before reporting a problem.
 
 ## Scope
 
-In scope: the code of this repository and the Docker image it publishes.
+In scope: the code of this repository and the Docker image it publishes. In
+particular:
+
+- **Secrets**: the passwords of the DoorBird users live in the Gladys
+  configuration of the integration (`secret` fields). They travel only to the
+  configured DoorBirds, in the HTTP Basic `Authorization` header (never in a
+  URL), and are never written to the logs, to `/data`, to an error message or
+  to the stream address shown to the user. An address typed with credentials
+  (`user:pass@host`) is refused. A password refused once is never tried again
+  without the user. Over plain HTTP, the LAN carries the Basic credentials
+  readable: use a dedicated DoorBird user with only the permissions it needs,
+  or an `https://` address.
+- **`/data`**: the only file is `doorbird-state.json`: the identity of each
+  DoorBird (MAC address, model, firmware, relays). No secret, no image.
+- **Network**: the integration talks only to the configured addresses (HTTP,
+  or HTTPS when the address starts with `https://`; a DoorBird only has a
+  self-signed certificate, which is then accepted), never to a cloud. It opens
+  no port: the events come over an outgoing connection.
+- **Safety**: opening a door is disabled by default and is never a device
+  feature, a widget button or a configuration action — only a scene action,
+  once allowed, for a relay the DoorBird lists, sent once and never retried.
+- **Camera images** stay in memory (the last ones, for the widget) and go to
+  Gladys only.
 
 Out of scope: Gladys Assistant itself (see its
 [security policy](https://github.com/GladysAssistant/Gladys/security/policy)),
-and the third-party services and devices the integration talks to.
+and the DoorBird devices and their firmware (report those to Bird Home
+Automation).

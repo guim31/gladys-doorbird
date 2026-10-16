@@ -1,0 +1,12 @@
+{
+  "BHA": {
+    "RETURNCODE": "1",
+    "VERSION": [
+      {
+        "FIRMWARE": "000099",
+        "BUILD_NUMBER": "14010101",
+        "WIFI_MAC_ADDR": "1CCAE3112233"
+      }
+    ]
+  }
+}
